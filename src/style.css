@@ -1,0 +1,566 @@
+:root {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    color-scheme: dark;
+    color: rgba(255, 255, 255, 0.87);
+    background-color: #080810;
+    -webkit-font-smoothing: antialiased;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    min-width: 320px;
+    min-height: 100vh;
+    overflow: hidden;
+    background: #080810;
+}
+
+/* ── Preview window ─────────────────────────────────────────────────────── */
+
+#preview {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    z-index: 200;
+    border-radius: 6px;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(0, 0, 0, 0.4);
+    background: #000;
+    cursor: move;
+}
+
+#preview.resizing {
+    cursor: nwse-resize;
+}
+
+.preview-resize-handle {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 16px;
+    height: 16px;
+    cursor: nwse-resize;
+    z-index: 10;
+    background: linear-gradient(135deg, transparent 50%, rgba(255, 255, 255, 0.2) 50%);
+}
+
+.preview-label {
+    position: absolute;
+    top: 0;
+    left: 0;
+    padding: 3px 8px;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.35);
+    background: rgba(0, 0, 0, 0.5);
+    pointer-events: none;
+    z-index: 1;
+}
+
+#preview canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+/* ── Node editor overlay ────────────────────────────────────────────────── */
+
+#node-editor {
+    position: fixed;
+    inset: 0;
+    z-index: 10;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.node-layer {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    /* children opt in */
+}
+
+.node-svg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 1;
+    overflow: visible;
+}
+
+/* ── Connections ────────────────────────────────────────────────────────── */
+
+.conn-line {
+    fill: none;
+    stroke-width: 4;
+    /* Thicker invisible base for easier clicking */
+    stroke: transparent;
+    pointer-events: stroke;
+}
+
+.conn-line-visible {
+    fill: none;
+    stroke-width: 1.5;
+    pointer-events: none;
+}
+
+.conn-sig-visible {
+    stroke: rgba(255, 255, 255, 0.38);
+}
+
+.conn-uv-visible {
+    stroke: rgba(0, 206, 201, 0.55);
+}
+
+.conn-line:hover+.conn-line-visible,
+.conn-line:active+.conn-line-visible {
+    stroke-width: 2.5;
+    stroke: #fff;
+    filter: drop-shadow(0 0 4px #fff);
+}
+
+.conn-temp {
+    fill: none;
+    stroke-width: 1.5;
+    stroke-dasharray: 6 4;
+    pointer-events: none;
+    animation: dash 0.4s linear infinite;
+}
+
+.conn-temp-sig {
+    stroke: rgba(255, 200, 80, 0.85);
+}
+
+.conn-temp-uv {
+    stroke: rgba(0, 206, 201, 0.9);
+}
+
+@keyframes dash {
+    to {
+        stroke-dashoffset: -10;
+    }
+}
+
+/* ── Node cards ─────────────────────────────────────────────────────────── */
+
+.node-card {
+    position: absolute;
+    width: 192px;
+    background: rgba(6, 6, 16, 0.93);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-top: 2px solid var(--node-color, #888);
+    border-radius: 6px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55);
+    pointer-events: auto;
+    z-index: 2;
+    user-select: none;
+}
+
+.node-header {
+    padding: 7px 28px 7px 10px;
+    /* right padding for × button */
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--node-color, #888);
+    cursor: grab;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.node-header:active {
+    cursor: grabbing;
+}
+
+.node-body {
+    padding: 4px 0;
+}
+
+/* ── Ports ──────────────────────────────────────────────────────────────── */
+
+.port-row {
+    display: flex;
+    align-items: center;
+    padding: 3px 8px;
+    gap: 7px;
+}
+
+.port-row-out {
+    justify-content: flex-end;
+}
+
+.port-row-in {
+    justify-content: flex-start;
+}
+
+.port-label {
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.38);
+    letter-spacing: 0.04em;
+    pointer-events: none;
+}
+
+.port-label-uv {
+    color: rgba(0, 206, 201, 0.65);
+}
+
+.port-dot {
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    border: 1.5px solid rgba(255, 255, 255, 0.28);
+    background: rgba(255, 255, 255, 0.05);
+    cursor: crosshair;
+    flex-shrink: 0;
+    transition: border-color 0.1s, background 0.1s, box-shadow 0.1s;
+}
+
+.port-dot-out {
+    border-color: var(--node-color, #888);
+    background: color-mix(in srgb, var(--node-color, #888) 18%, transparent);
+}
+
+.port-dot.port-uv {
+    border-color: #00cec9;
+    background: rgba(0, 206, 201, 0.15);
+}
+
+.port-dot:hover,
+.port-dot.snap-target {
+    border-color: #fff;
+    background: rgba(255, 255, 255, 0.28);
+    box-shadow: 0 0 6px rgba(255, 255, 255, 0.6);
+    transform: scale(1.2);
+}
+
+.port-dot.port-uv:hover,
+.port-dot.port-uv.snap-target {
+    border-color: #00cec9;
+    background: rgba(0, 206, 201, 0.4);
+    box-shadow: 0 0 6px #00cec9;
+}
+
+/* ── Node params ────────────────────────────────────────────────────────── */
+
+.node-params {
+    padding: 4px 8px 2px;
+    border-top: 1px solid rgba(255, 255, 255, 0.04);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    margin: 3px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.node-param-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.param-label {
+    font-size: 9px;
+    color: rgba(255, 255, 255, 0.3);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    flex-shrink: 0;
+    min-width: 38px;
+}
+
+/* ── Slider with zero tick + value ──────────────────────────────────────── */
+
+.slider-outer {
+    display: flex;
+    align-items: center;
+    flex: 1;
+    gap: 5px;
+    min-width: 0;
+}
+
+.slider-wrap {
+    position: relative;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    min-width: 0;
+}
+
+/* Zero-crossing tick mark — shown below the track for bipolar sliders */
+.slider-zero-tick {
+    position: absolute;
+    bottom: -1px;
+    width: 1px;
+    height: 5px;
+    background: rgba(255, 255, 255, 0.35);
+    transform: translateX(-50%);
+    pointer-events: none;
+    border-radius: 0;
+}
+
+.slider-val {
+    font-size: 9px;
+    color: rgba(255, 255, 255, 0.38);
+    min-width: 32px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+}
+
+/* Select */
+.ns-select {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.7);
+    border-radius: 4px;
+    padding: 3px 5px;
+    font-size: 10px;
+    font-family: inherit;
+    outline: none;
+    cursor: pointer;
+    flex: 1;
+    transition: border-color 0.15s;
+}
+
+.ns-select:hover,
+.ns-select:focus {
+    border-color: rgba(255, 255, 255, 0.22);
+}
+
+.ns-select option {
+    background: #10101c;
+}
+
+/* Range slider */
+.ns-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 3px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+}
+
+.ns-slider:hover {
+    background: rgba(255, 255, 255, 0.18);
+}
+
+.ns-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--node-color, #fff);
+    cursor: pointer;
+    box-shadow: 0 0 4px var(--node-color, #fff);
+    transition: transform 0.1s;
+}
+
+.ns-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.3);
+}
+
+/* Delete button */
+.node-delete {
+    position: absolute;
+    top: 5px;
+    right: 6px;
+    background: none;
+    border: none;
+    color: rgba(255, 80, 80, 0.45);
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 2px;
+    transition: color 0.1s;
+    pointer-events: auto;
+}
+
+.node-delete:hover {
+    color: #ff4444;
+}
+
+/* ── Toolbar / Menu ─────────────────────────────────────────────────────────── */
+
+.toolbar {
+    position: fixed;
+    bottom: 20px;
+    left: 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    z-index: 30;
+    pointer-events: none;
+}
+
+.menu-trigger,
+.toolbar-btn {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 8px 18px;
+    background: rgba(8, 8, 20, 0.92);
+    border: 1px solid rgba(255, 255, 255, 0.13);
+    border-radius: 24px;
+    color: rgba(255, 255, 255, 0.65);
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    cursor: pointer;
+    pointer-events: auto;
+    transition: all 0.15s;
+    backdrop-filter: blur(12px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+.menu-trigger:hover,
+.menu-trigger.active,
+.toolbar-btn:hover {
+    border-color: rgba(255, 255, 255, 0.28);
+    color: rgba(255, 255, 255, 0.9);
+    background: rgba(16, 16, 36, 0.96);
+}
+
+.menu-trigger-icon {
+    font-size: 16px;
+    line-height: 1;
+    transition: transform 0.2s;
+}
+
+.menu-trigger.active .menu-trigger-icon {
+    transform: rotate(45deg);
+}
+
+.module-menu {
+    position: fixed;
+    width: 272px;
+    background: rgba(6, 6, 18, 0.96);
+    backdrop-filter: blur(24px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    padding: 12px;
+    z-index: 29;
+    pointer-events: none;
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+    transform-origin: top left;
+    transition: opacity 0.15s ease, transform 0.15s ease;
+    box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+.module-menu.open {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    pointer-events: auto;
+}
+
+.menu-section {
+    margin-bottom: 10px;
+}
+
+.menu-section:last-child {
+    margin-bottom: 0;
+}
+
+.menu-section-label {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.22);
+    margin-bottom: 6px;
+    padding: 0 2px;
+}
+
+.menu-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+}
+
+.menu-module-btn {
+    padding: 4px 10px;
+    border-radius: 14px;
+    border: 1px solid color-mix(in srgb, var(--accent, #888) 35%, transparent);
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--accent, rgba(255, 255, 255, 0.7));
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.1s, box-shadow 0.1s, transform 0.1s;
+}
+
+.menu-module-btn:hover {
+    background: color-mix(in srgb, var(--accent, #888) 14%, transparent);
+    box-shadow: 0 0 8px color-mix(in srgb, var(--accent, #888) 28%, transparent);
+    transform: translateY(-1px);
+}
+
+/* ── Shader error panel ─────────────────────────────────────────────────── */
+
+#shader-error {
+    display: none;
+    position: fixed;
+    bottom: 76px;
+    left: 50%;
+    transform: translateX(-50%);
+    max-width: 700px;
+    width: calc(100% - 40px);
+    background: rgba(28, 0, 0, 0.94);
+    border: 1px solid rgba(255, 60, 60, 0.45);
+    border-left: 3px solid #ff3333;
+    border-radius: 6px;
+    padding: 10px 14px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 11px;
+    line-height: 1.6;
+    color: #ff9999;
+    white-space: pre-wrap;
+    word-break: break-all;
+    z-index: 50;
+    pointer-events: auto;
+    max-height: 180px;
+    overflow-y: auto;
+    box-shadow: 0 4px 20px rgba(255, 0, 0, 0.18);
+}
+
+/* ── Scrollbars ─────────────────────────────────────────────────────────── */
+::-webkit-scrollbar {
+    width: 4px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 2px;
+}
+
+
+/* ── Scrollbars ─────────────────────────────────────────────────────────── */
+::-webkit-scrollbar {
+    width: 4px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 2px;
+}
