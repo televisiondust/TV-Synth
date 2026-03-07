@@ -136,6 +136,16 @@ void main() {
         return conn ? `out_${conn.fromId}.xy` : 'uv';
     }
 
+    // Analog imperfection snippet — grain + slow luma drift on a source output.
+    // When analog == 0 the additions are no-ops (GPU folds the constants).
+    private static analogChunk(id: string, analog: string): string {
+        return (
+            `    out_${id} += (hash21(gl_FragCoord.xy * 0.37 + fract(uTime * 17.13)) - 0.5) * ${analog} * 0.2;\n` +
+            `    out_${id} += vec3(sin(uTime * 7.3) * ${analog} * 0.06);\n` +
+            `    out_${id} = clamp(out_${id}, 0.0, 1.0);\n`
+        );
+    }
+
     // Re-evaluates a SOURCE node inline using an explicit UV expression.
     // Used by BLEND to sample its A/B inputs at a transformed UV coordinate.
     // Returns GLSL code that declares a new vec3 variable named out_<id><suffix>.
@@ -173,14 +183,61 @@ void main() {
                 const type = this.i(mod.params.type);
                 const radius = this.f(mod.params.radius, 0.4);
                 const smooth = this.f(Math.max(parseFloat(mod.params.smooth ?? 0.02), 0.001), 0.02);
+                const chroma = this.f(mod.params.chroma, 0);
                 const distVar = `dist${suffix}_${id}`;
-                if (type === 1) c += `    float ${distVar} = max(abs(${uvExpr}.x - 0.5), abs(${uvExpr}.y - 0.5)) * 2.0;
+                const dFn = (uv: string) => {
+                    if (type === 1) return `max(abs(${uv}.x - 0.5), abs(${uv}.y - 0.5)) * 2.0`;
+                    if (type === 2) return `min(abs(${uv}.x - 0.5), abs(${uv}.y - 0.5)) * 2.0`;
+                    if (type === 3) return `(abs(${uv}.x - 0.5) + abs(${uv}.y - 0.5))`;
+                    return `length(${uv} - 0.5) * 2.0`;
+                };
+                c += `    float ${distVar}_r = ${dFn(`(${uvExpr} - vec2(${chroma}, 0.0))`)};
 `;
-                else if (type === 2) c += `    float ${distVar} = min(abs(${uvExpr}.x - 0.5), abs(${uvExpr}.y - 0.5)) * 2.0;
+                c += `    float ${distVar}_g = ${dFn(uvExpr)};
 `;
-                else c += `    float ${distVar} = length(${uvExpr} - 0.5) * 2.0;
+                c += `    float ${distVar}_b = ${dFn(`(${uvExpr} + vec2(${chroma}, 0.0))`)};
 `;
-                c += `    vec3 ${out} = vec3(1.0 - smoothstep(${radius} - ${smooth}, ${radius} + ${smooth}, ${distVar}));
+                c += `    vec3 ${out} = vec3(
+`;
+                c += `        1.0 - smoothstep(${radius} - ${smooth}, ${radius} + ${smooth}, ${distVar}_r),
+`;
+                c += `        1.0 - smoothstep(${radius} - ${smooth}, ${radius} + ${smooth}, ${distVar}_g),
+`;
+                c += `        1.0 - smoothstep(${radius} - ${smooth}, ${radius} + ${smooth}, ${distVar}_b)
+`;
+                c += `    );
+`;
+                break;
+            }
+            case 'HATCH': {
+                const freq = this.f(mod.params.freq, 10);
+                const thickH = this.f(mod.params.thickH, 0.3);
+                const thickV = this.f(mod.params.thickV, 0.3);
+                const chroma = this.f(mod.params.chroma, 0);
+                const edge = this.f(Math.max(parseFloat(mod.params.edge ?? 0.01), 0.001), 0.01);
+                const hFn = (s: string) => `smoothstep(${thickH} - ${edge}, ${thickH} + ${edge}, abs(sin(${s} * ${freq} * PI)))`;
+                const vFn = (s: string) => `smoothstep(${thickV} - ${edge}, ${thickV} + ${edge}, abs(sin(${s} * ${freq} * PI)))`;
+                c += `    float hH${suffix}_${id}_r = ${hFn(`(${uvExpr}.y - ${chroma})`)};
+`;
+                c += `    float hH${suffix}_${id}_g = ${hFn(`${uvExpr}.y`)};
+`;
+                c += `    float hH${suffix}_${id}_b = ${hFn(`(${uvExpr}.y + ${chroma})`)};
+`;
+                c += `    float hV${suffix}_${id}_r = ${vFn(`(${uvExpr}.x - ${chroma})`)};
+`;
+                c += `    float hV${suffix}_${id}_g = ${vFn(`${uvExpr}.x`)};
+`;
+                c += `    float hV${suffix}_${id}_b = ${vFn(`(${uvExpr}.x + ${chroma})`)};
+`;
+                c += `    vec3 ${out} = vec3(
+`;
+                c += `        min(hH${suffix}_${id}_r, hV${suffix}_${id}_r),
+`;
+                c += `        min(hH${suffix}_${id}_g, hV${suffix}_${id}_g),
+`;
+                c += `        min(hH${suffix}_${id}_b, hV${suffix}_${id}_b)
+`;
+                c += `    );
 `;
                 break;
             }
@@ -218,11 +275,13 @@ void main() {
                 const speed = this.f(mod.params.speed, 1);
                 const type = this.i(mod.params.type);
                 const chroma = this.f(mod.params.chromaOffset, 0);
+                const analog = this.f(mod.params.analog, 0);
                 c += `    vec3 out_${id} = vec3(\n`;
                 c += `        getOsc(getRamp(${uvE}, ${dir}) * ${freq} + uTime * ${speed} + ${chroma}, ${type}),\n`;
                 c += `        getOsc(getRamp(${uvE}, ${dir}) * ${freq} + uTime * ${speed},             ${type}),\n`;
                 c += `        getOsc(getRamp(${uvE}, ${dir}) * ${freq} + uTime * ${speed} - ${chroma}, ${type})\n`;
                 c += `    );\n`;
+                c += this.analogChunk(id, analog);
                 break;
             }
 
@@ -230,7 +289,9 @@ void main() {
                 const uvE = this.getUv(id, graph);
                 const scale = this.f(mod.params.scale, 4);
                 const speed = this.f(mod.params.speed, 0.5);
+                const analog = this.f(mod.params.analog, 0);
                 c += `    vec3 out_${id} = vec3(valueNoise(${uvE} * ${scale} + uTime * ${speed}));\n`;
+                c += this.analogChunk(id, analog);
                 break;
             }
 
@@ -239,14 +300,44 @@ void main() {
                 const type = this.i(mod.params.type);
                 const radius = this.f(mod.params.radius, 0.4);
                 const smooth = this.f(Math.max(parseFloat(mod.params.smooth ?? 0.02), 0.001), 0.02);
-                if (type === 1) {
-                    c += `    float dist_${id} = max(abs(${uvE}.x - 0.5), abs(${uvE}.y - 0.5)) * 2.0;\n`;
-                } else if (type === 2) {
-                    c += `    float dist_${id} = min(abs(${uvE}.x - 0.5), abs(${uvE}.y - 0.5)) * 2.0;\n`;
-                } else {
-                    c += `    float dist_${id} = length(${uvE} - 0.5) * 2.0;\n`;
-                }
-                c += `    vec3 out_${id} = vec3(1.0 - smoothstep(${radius} - ${smooth}, ${radius} + ${smooth}, dist_${id}));\n`;
+                const chroma = this.f(mod.params.chroma, 0);
+                const analog = this.f(mod.params.analog, 0);
+                const dFn = (uv: string) => {
+                    if (type === 1) return `max(abs(${uv}.x - 0.5), abs(${uv}.y - 0.5)) * 2.0`;
+                    if (type === 2) return `min(abs(${uv}.x - 0.5), abs(${uv}.y - 0.5)) * 2.0`;
+                    if (type === 3) return `(abs(${uv}.x - 0.5) + abs(${uv}.y - 0.5))`;
+                    return `length(${uv} - 0.5) * 2.0`;
+                };
+                c += `    float distR_${id} = ${dFn(`(${uvE} - vec2(${chroma}, 0.0))`)};\n`;
+                c += `    float distG_${id} = ${dFn(uvE)};\n`;
+                c += `    float distB_${id} = ${dFn(`(${uvE} + vec2(${chroma}, 0.0))`)};\n`;
+                c += `    vec3 out_${id} = vec3(\n`;
+                c += `        1.0 - smoothstep(${radius} - ${smooth}, ${radius} + ${smooth}, distR_${id}),\n`;
+                c += `        1.0 - smoothstep(${radius} - ${smooth}, ${radius} + ${smooth}, distG_${id}),\n`;
+                c += `        1.0 - smoothstep(${radius} - ${smooth}, ${radius} + ${smooth}, distB_${id})\n`;
+                c += `    );\n`;
+                c += this.analogChunk(id, analog);
+                break;
+            }
+
+            case 'HATCH': {
+                const uvE = this.getUv(id, graph);
+                const freq = this.f(mod.params.freq, 10);
+                const thickH = this.f(mod.params.thickH, 0.3);
+                const thickV = this.f(mod.params.thickV, 0.3);
+                const chroma = this.f(mod.params.chroma, 0);
+                const edge = this.f(Math.max(parseFloat(mod.params.edge ?? 0.01), 0.001), 0.01);
+                const analog = this.f(mod.params.analog, 0);
+                const hFn = (s: string) => `smoothstep(${thickH} - ${edge}, ${thickH} + ${edge}, abs(sin(${s} * ${freq} * PI)))`;
+                const vFn = (s: string) => `smoothstep(${thickV} - ${edge}, ${thickV} + ${edge}, abs(sin(${s} * ${freq} * PI)))`;
+                c += `    float hHR_${id} = ${hFn(`(${uvE}.y - ${chroma})`)};\n`;
+                c += `    float hHG_${id} = ${hFn(`${uvE}.y`)};\n`;
+                c += `    float hHB_${id} = ${hFn(`(${uvE}.y + ${chroma})`)};\n`;
+                c += `    float hVR_${id} = ${vFn(`(${uvE}.x - ${chroma})`)};\n`;
+                c += `    float hVG_${id} = ${vFn(`${uvE}.x`)};\n`;
+                c += `    float hVB_${id} = ${vFn(`(${uvE}.x + ${chroma})`)};\n`;
+                c += `    vec3 out_${id} = vec3(min(hHR_${id}, hVR_${id}), min(hHG_${id}, hVG_${id}), min(hHB_${id}, hVB_${id}));\n`;
+                c += this.analogChunk(id, analog);
                 break;
             }
 

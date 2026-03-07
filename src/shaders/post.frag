@@ -5,6 +5,7 @@ uniform vec2 uResolution;
 uniform float uScanlineIntensity;
 uniform float uCurvature;
 uniform float uChromaticAberration;
+uniform float uNoiseAmount;
 uniform float uTime;
 
 varying vec2 vUv;
@@ -44,8 +45,8 @@ void main() {
     color *= vignette;
     
     // Phosphor Noise / Grain
-    float noise = (fract(sin(dot(uv + uTime * 0.01, vec2(12.9898, 78.233))) * 43758.5453) - 0.5) * 0.05;
-    color += noise;
+    float noise = (fract(sin(dot(uv + uTime * 0.01, vec2(12.9898, 78.233))) * 43758.5453) - 0.5);
+    color += noise * uNoiseAmount;
 
     gl_FragColor = vec4(color, 1.0);
 }

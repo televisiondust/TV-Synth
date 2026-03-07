@@ -1,6 +1,6 @@
 export type ModuleType =
     // Sources
-    | 'OSC' | 'NOISE' | 'SHAPE'
+    | 'OSC' | 'NOISE' | 'SHAPE' | 'HATCH'
     // Live inputs
     | 'CAMERA' | 'SCREEN'
     // Color / mix

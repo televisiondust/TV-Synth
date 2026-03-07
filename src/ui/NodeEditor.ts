@@ -6,6 +6,7 @@ const PORT_DEFS: Record<string, { inputs: string[]; outputs: string[] }> = {
     OSC: { inputs: ['uv'], outputs: ['out'] },
     NOISE: { inputs: ['uv'], outputs: ['out'] },
     SHAPE: { inputs: ['uv'], outputs: ['out'] },
+    HATCH: { inputs: ['uv'], outputs: ['out'] },
     CAMERA: { inputs: ['uv'], outputs: ['out'] },
     SCREEN: { inputs: ['uv'], outputs: ['out'] },
     COLOR: { inputs: ['src'], outputs: ['out'] },
@@ -25,6 +26,7 @@ const MODULE_COLOR: Record<string, string> = {
     OSC: '#ff6b6b',
     NOISE: '#ffa040',
     SHAPE: '#ffd93d',
+    HATCH: '#b8f5b8',
     CAMERA: '#00cec9',
     SCREEN: '#00b4d8',
     COLOR: '#a29bfe',
@@ -41,7 +43,7 @@ const MODULE_COLOR: Record<string, string> = {
 };
 
 const MENU_GROUPS: { label: string; types: ModuleType[] }[] = [
-    { label: 'Sources', types: ['OSC', 'NOISE', 'SHAPE'] },
+    { label: 'Sources', types: ['OSC', 'NOISE', 'SHAPE', 'HATCH'] },
     { label: 'Live Input', types: ['CAMERA', 'SCREEN'] },
     { label: 'Color / Mix', types: ['COLOR', 'BLEND', 'FEEDBACK'] },
     { label: 'Transforms', types: ['ROTATE', 'SCALE', 'SCROLL', 'KALEID', 'PIXELATE', 'WARP', 'MIRROR'] },
@@ -502,6 +504,9 @@ export class NodeEditor {
                 const c = this.makeSlider(0, 0.2, 0.001, mod.params.chromaOffset ?? 0);
                 c.addEventListener('input', () => { mod.params.chromaOffset = parseFloat(c.value); this.onChange(); });
                 row('Chroma', c);
+                const an = this.makeSlider(0, 1, 0.01, mod.params.analog ?? 0);
+                an.addEventListener('input', () => { mod.params.analog = parseFloat(an.value); this.onChange(); });
+                row('Analog', an);
                 break;
             }
             case 'NOISE': {
@@ -511,10 +516,13 @@ export class NodeEditor {
                 const sp = this.makeSlider(-4, 4, 0.05, mod.params.speed ?? 0.5);
                 sp.addEventListener('input', () => { mod.params.speed = parseFloat(sp.value); this.onChange(); });
                 row('Speed', sp);
+                const an = this.makeSlider(0, 1, 0.01, mod.params.analog ?? 0);
+                an.addEventListener('input', () => { mod.params.analog = parseFloat(an.value); this.onChange(); });
+                row('Analog', an);
                 break;
             }
             case 'SHAPE': {
-                const t = this.makeSelect([['0', 'Circle'], ['1', 'Rect'], ['2', 'Cross']], mod.params.type ?? 0);
+                const t = this.makeSelect([['0', 'Circle'], ['1', 'Rect'], ['2', 'Cross'], ['3', 'Diamond']], mod.params.type ?? 0);
                 t.addEventListener('change', () => { mod.params.type = parseInt(t.value); this.onChange(); });
                 row('Type', t);
                 const r2 = this.makeSlider(0.01, 0.99, 0.01, mod.params.radius ?? 0.4);
@@ -523,6 +531,34 @@ export class NodeEditor {
                 const sm = this.makeSlider(0.001, 0.2, 0.001, mod.params.smooth ?? 0.02);
                 sm.addEventListener('input', () => { mod.params.smooth = parseFloat(sm.value); this.onChange(); });
                 row('Edge', sm);
+                const ch = this.makeSlider(0, 0.12, 0.001, mod.params.chroma ?? 0);
+                ch.addEventListener('input', () => { mod.params.chroma = parseFloat(ch.value); this.onChange(); });
+                row('Chroma', ch);
+                const an = this.makeSlider(0, 1, 0.01, mod.params.analog ?? 0);
+                an.addEventListener('input', () => { mod.params.analog = parseFloat(an.value); this.onChange(); });
+                row('Analog', an);
+                break;
+            }
+
+            case 'HATCH': {
+                const f = this.makeSlider(2, 40, 0.5, mod.params.freq ?? 10);
+                f.addEventListener('input', () => { mod.params.freq = parseFloat(f.value); this.onChange(); });
+                row('Freq', f);
+                const th = this.makeSlider(0.01, 0.99, 0.01, mod.params.thickH ?? 0.3);
+                th.addEventListener('input', () => { mod.params.thickH = parseFloat(th.value); this.onChange(); });
+                row('ThickH', th);
+                const tv = this.makeSlider(0.01, 0.99, 0.01, mod.params.thickV ?? 0.3);
+                tv.addEventListener('input', () => { mod.params.thickV = parseFloat(tv.value); this.onChange(); });
+                row('ThickV', tv);
+                const ed = this.makeSlider(0.001, 0.3, 0.001, mod.params.edge ?? 0.01);
+                ed.addEventListener('input', () => { mod.params.edge = parseFloat(ed.value); this.onChange(); });
+                row('Edge', ed);
+                const ch2 = this.makeSlider(0, 0.12, 0.001, mod.params.chroma ?? 0);
+                ch2.addEventListener('input', () => { mod.params.chroma = parseFloat(ch2.value); this.onChange(); });
+                row('Chroma', ch2);
+                const an = this.makeSlider(0, 1, 0.01, mod.params.analog ?? 0);
+                an.addEventListener('input', () => { mod.params.analog = parseFloat(an.value); this.onChange(); });
+                row('Analog', an);
                 break;
             }
             case 'COLOR': {
@@ -619,6 +655,18 @@ export class NodeEditor {
                 const fl = this.makeSelect([['1', 'Mirror'], ['0', 'Normal']], mod.params.flip ?? 1);
                 fl.addEventListener('change', () => { mod.params.flip = parseInt(fl.value); this.onChange(); });
                 row('Flip', fl);
+                break;
+            }
+            case 'OUTPUT': {
+                const gr = this.makeSlider(0, 0.3, 0.002, mod.params.noiseAmount ?? 0);
+                gr.addEventListener('input', () => { mod.params.noiseAmount = parseFloat(gr.value); this.onChange(); });
+                row('Grain', gr);
+                const sc = this.makeSlider(0, 1, 0.01, mod.params.scanlineIntensity ?? 0);
+                sc.addEventListener('input', () => { mod.params.scanlineIntensity = parseFloat(sc.value); this.onChange(); });
+                row('Scanlines', sc);
+                const crt = this.makeSlider(0, 0.5, 0.005, mod.params.crtWarp ?? 0);
+                crt.addEventListener('input', () => { mod.params.crtWarp = parseFloat(crt.value); this.onChange(); });
+                row('CRT Warp', crt);
                 break;
             }
             default:

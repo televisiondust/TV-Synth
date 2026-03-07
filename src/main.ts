@@ -78,6 +78,7 @@ class TVSynth {
         this.setupInitialGraph();
         this.setupRenderTargets();
         this.setupMaterials();
+        this.syncOutputUniforms();
         this.setupScene();
 
         const editorEl = document.getElementById('node-editor')!;
@@ -205,7 +206,7 @@ class TVSynth {
 
     setupInitialGraph() {
         const osc1 = this.graph.addModule('OSC', { dir: 0, freq: 5.0, speed: 1.0, type: 0, chromaOffset: 0.0 }, { x: 200, y: 260 });
-        const output = this.graph.addModule('OUTPUT', {}, { x: 480, y: 260 });
+        const output = this.graph.addModule('OUTPUT', { noiseAmount: 0.05, scanlineIntensity: 1.0, crtWarp: 0 }, { x: 480, y: 260 });
         this.graph.connect(osc1, output, 'signal');
     }
 
@@ -236,9 +237,10 @@ class TVSynth {
             uniforms: {
                 tDiffuse: { value: null },
                 uResolution: { value: new THREE.Vector2(PREVIEW_W, PREVIEW_H) },
-                uScanlineIntensity: { value: 0.3 },
-                uCurvature: { value: 0.2 },
-                uChromaticAberration: { value: 0.005 },
+                uScanlineIntensity: { value: 0 },
+                uCurvature: { value: 0 },
+                uChromaticAberration: { value: 0 },
+                uNoiseAmount: { value: 0 },
                 uTime: { value: 0 },
             },
             fragmentShader: postFrag,
@@ -275,7 +277,68 @@ class TVSynth {
         const newShader = ShaderGenerator.generateFragmentShader(this.graph);
         this.synthMaterial.fragmentShader = newShader;
         this.synthMaterial.needsUpdate = true;
+
+        this.syncOutputUniforms();
         this.needsRecompile = false;
+    }
+
+    private syncOutputUniforms() {
+        const outputMod = Array.from(this.graph.modules.values()).find(m => m.type === 'OUTPUT');
+        if (outputMod) {
+            this.postMaterial.uniforms.uNoiseAmount.value = outputMod.params.noiseAmount ?? 0;
+            this.postMaterial.uniforms.uScanlineIntensity.value = outputMod.params.scanlineIntensity ?? 0;
+            this.postMaterial.uniforms.uCurvature.value = outputMod.params.crtWarp ?? 0;
+        }
+    }
+
+    private popOutWindow: Window | null = null;
+
+    private resizeRendererTo(w: number, h: number) {
+        this.renderer.setSize(w, h);
+        this.synthMaterial.uniforms.uResolution.value.set(w, h);
+        this.postMaterial.uniforms.uResolution.value.set(w, h);
+        this.renderTarget1.setSize(w, h);
+        this.renderTarget2.setSize(w, h);
+    }
+
+    popOut() {
+        if (this.popOutWindow && !this.popOutWindow.closed) {
+            this.popOutWindow.focus();
+            return;
+        }
+        const pw = window.open('', '_blank', 'width=1280,height=720,toolbar=no,menubar=no,location=no');
+        if (!pw) { this.showError('Pop-out blocked — allow pop-ups for this page.'); return; }
+        this.popOutWindow = pw;
+
+        // Resize renderer to match the pop-out window so the stream is native resolution
+        const syncSize = () => this.resizeRendererTo(pw.innerWidth, pw.innerHeight);
+        syncSize();
+
+        // Canvas is now much larger than the preview div — shrink it visually via CSS
+        this.renderer.domElement.style.cssText = 'width:100%;height:100%;object-fit:contain;';
+
+        // Capture the now-high-res canvas stream
+        const stream = this.renderer.domElement.captureStream(60);
+
+        pw.document.title = 'vidSynth — Output';
+        pw.document.body.style.cssText = 'margin:0;background:#000;overflow:hidden;';
+        const video = pw.document.createElement('video');
+        video.srcObject = stream;
+        video.autoplay = true;
+        video.muted = true;
+        video.style.cssText = 'width:100vw;height:100vh;object-fit:contain;';
+        pw.document.body.appendChild(video);
+        video.play();
+
+        // Keep renderer in sync when the pop-out window is resized
+        pw.addEventListener('resize', syncSize);
+
+        // Restore preview resolution when the pop-out is closed
+        pw.addEventListener('beforeunload', () => {
+            this.popOutWindow = null;
+            this.renderer.domElement.style.cssText = '';
+            this.resizeRendererTo(PREVIEW_W, PREVIEW_H);
+        });
     }
 
     showError(msg: string) {
@@ -335,6 +398,12 @@ class TVSynth {
         helpBtn.innerHTML = 'Help';
         helpBtn.onclick = () => this.nodeEditor.toggleHelp();
         toolbar.appendChild(helpBtn);
+
+        const popOutBtn = document.createElement('button');
+        popOutBtn.className = 'toolbar-btn';
+        popOutBtn.innerHTML = 'Pop Out ↗';
+        popOutBtn.onclick = () => this.popOut();
+        toolbar.appendChild(popOutBtn);
 
         const saveBtn = document.createElement('button');
         saveBtn.className = 'toolbar-btn';
